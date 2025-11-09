@@ -21,8 +21,8 @@ import {
   RevenueCatRestoreError,
   RevenueCatNetworkError,
   RevenueCatExpoGoError,
-} from "../domain/errors/RevenueCatError";
-import type { RevenueCatConfig } from "../domain/value-objects/RevenueCatConfig";
+} from "../../domain/errors/RevenueCatError";
+import type { RevenueCatConfig } from "../../domain/value-objects/RevenueCatConfig";
 
 /**
  * Check if running in Expo Go
