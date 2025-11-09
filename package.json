@@ -1,0 +1,59 @@
+{
+  "name": "@umituz/react-native-revenuecat",
+  "version": "1.0.0",
+  "description": "RevenueCat wrapper for React Native apps - Secure subscription management with database-first approach",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "version:patch": "npm version patch -m 'chore: release v%s'",
+    "version:minor": "npm version minor -m 'chore: release v%s'",
+    "version:major": "npm version major -m 'chore: release v%s'"
+  },
+  "keywords": [
+    "react-native",
+    "revenuecat",
+    "subscription",
+    "in-app-purchase",
+    "iap",
+    "premium",
+    "security",
+    "ddd",
+    "domain-driven-design",
+    "type-safe",
+    "solid",
+    "dry",
+    "kiss"
+  ],
+  "author": "Ümit UZ <umit@umituz.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umituz/react-native-revenuecat.git"
+  },
+  "peerDependencies": {
+    "react-native-purchases": ">=9.0.0",
+    "react": ">=18.2.0",
+    "react-native": ">=0.74.0",
+    "expo-constants": ">=15.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "@types/react-native": "^0.73.0",
+    "react": "^18.2.0",
+    "react-native": "^0.74.0",
+    "react-native-purchases": "^9.6.3",
+    "expo-constants": "^15.0.0",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
+}
+

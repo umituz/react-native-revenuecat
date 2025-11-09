@@ -1,0 +1,366 @@
+/**
+ * RevenueCat Service Implementation
+ * Secure RevenueCat wrapper with database-first approach
+ *
+ * IMPORTANT: RevenueCat is ONLY used for purchases.
+ * Premium status should always be checked from your database.
+ */
+
+import { Platform } from "react-native";
+import Constants from "expo-constants";
+import Purchases, {
+  type PurchasesPackage,
+  type PurchasesOffering,
+  type CustomerInfo,
+} from "react-native-purchases";
+import type { IRevenueCatService, InitializeResult, PurchaseResult, RestoreResult } from "../application/ports/IRevenueCatService";
+import {
+  RevenueCatInitializationError,
+  RevenueCatConfigurationError,
+  RevenueCatPurchaseError,
+  RevenueCatRestoreError,
+  RevenueCatNetworkError,
+  RevenueCatExpoGoError,
+} from "../domain/errors/RevenueCatError";
+import type { RevenueCatConfig } from "../domain/value-objects/RevenueCatConfig";
+
+/**
+ * Check if running in Expo Go
+ */
+function isExpoGo(): boolean {
+  return Constants.executionEnvironment === "storeClient";
+}
+
+/**
+ * Get expiration date from RevenueCat entitlement
+ */
+function getExpirationDate(entitlement: any): string | null {
+  if (!entitlement || !entitlement.expirationDate) {
+    return null;
+  }
+  return new Date(entitlement.expirationDate).toISOString();
+}
+
+export class RevenueCatService implements IRevenueCatService {
+  private config: RevenueCatConfig;
+  private isInitializedFlag: boolean = false;
+
+  constructor(config: RevenueCatConfig = {}) {
+    this.config = config;
+  }
+
+  /**
+   * Get RevenueCat API key for current platform
+   */
+  getRevenueCatKey(): string {
+    const iosKey =
+      this.config.iosApiKey ||
+      Constants.expoConfig?.extra?.revenueCatIosKey ||
+      process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ||
+      "";
+    const androidKey =
+      this.config.androidApiKey ||
+      Constants.expoConfig?.extra?.revenueCatAndroidKey ||
+      process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ||
+      "";
+
+    const key = Platform.select({
+      ios: iosKey,
+      android: androidKey,
+      default: iosKey,
+    });
+
+    if (!key) {
+      throw new RevenueCatConfigurationError(
+        "RevenueCat API key not found. Please provide iosApiKey or androidApiKey in config."
+      );
+    }
+
+    return key;
+  }
+
+  /**
+   * Check if RevenueCat is initialized
+   */
+  isInitialized(): boolean {
+    return this.isInitializedFlag;
+  }
+
+  /**
+   * Initialize RevenueCat SDK
+   * Only called when subscription screen is opened (lazy initialization)
+   */
+  async initialize(userId: string, apiKey?: string): Promise<InitializeResult> {
+    try {
+      // Check if running in Expo Go
+      if (isExpoGo()) {
+        return {
+          success: false,
+          offering: null,
+          hasPremium: false,
+        };
+      }
+
+      const key = apiKey || this.getRevenueCatKey();
+      if (!key) {
+        throw new RevenueCatConfigurationError("RevenueCat API key is required");
+      }
+
+      await Purchases.configure({ apiKey: key, appUserID: userId });
+      this.isInitializedFlag = true;
+
+      const [customerInfo, offerings] = await Promise.all([
+        Purchases.getCustomerInfo(),
+        Purchases.getOfferings(),
+      ]);
+
+      const hasPremium = !!customerInfo.entitlements.active["premium"];
+      const offering = offerings.current;
+
+      return {
+        success: true,
+        offering,
+        hasPremium,
+      };
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "RevenueCat init failed";
+
+      // Check if it's Expo Go error
+      if (
+        errorMessage.includes("Expo Go") ||
+        errorMessage.includes("native store is not available")
+      ) {
+        return {
+          success: false,
+          offering: null,
+          hasPremium: false,
+        };
+      }
+
+      throw new RevenueCatInitializationError(errorMessage);
+    }
+  }
+
+  /**
+   * Fetch offerings from RevenueCat
+   */
+  async fetchOfferings(): Promise<PurchasesOffering | null> {
+    if (!this.isInitializedFlag) {
+      throw new RevenueCatInitializationError();
+    }
+
+    if (isExpoGo()) {
+      return null;
+    }
+
+    try {
+      const offerings = await Purchases.getOfferings();
+      return offerings.current;
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "Fetch offerings failed";
+      throw new RevenueCatNetworkError(errorMessage);
+    }
+  }
+
+  /**
+   * Sync premium status to database
+   */
+  private async syncPremiumStatus(
+    userId: string,
+    customerInfo: CustomerInfo
+  ): Promise<void> {
+    const premiumEntitlement = customerInfo.entitlements.active["premium"];
+
+    if (premiumEntitlement) {
+      const productId = premiumEntitlement.productIdentifier;
+      const expiresAt = getExpirationDate(premiumEntitlement);
+
+      // Call callback if provided
+      if (this.config.onPremiumStatusChanged) {
+        try {
+          await this.config.onPremiumStatusChanged(userId, true, productId, expiresAt || undefined);
+        } catch (error) {
+          // Don't fail purchase if callback fails
+        }
+      }
+    } else {
+      // Call callback if provided
+      if (this.config.onPremiumStatusChanged) {
+        try {
+          await this.config.onPremiumStatusChanged(userId, false);
+        } catch (error) {
+          // Don't fail if callback fails
+        }
+      }
+    }
+  }
+
+  /**
+   * Purchase a package and sync to database
+   */
+  async purchasePackage(pkg: PurchasesPackage, userId: string): Promise<PurchaseResult> {
+    if (!this.isInitializedFlag) {
+      throw new RevenueCatInitializationError();
+    }
+
+    if (isExpoGo()) {
+      throw new RevenueCatExpoGoError();
+    }
+
+    try {
+      // Perform purchase
+      const purchaseResult = await Purchases.purchasePackage(pkg);
+      const customerInfo = purchaseResult.customerInfo;
+      const isPremium = !!customerInfo.entitlements.active["premium"];
+
+      if (isPremium) {
+        // Sync to database
+        await this.syncPremiumStatus(userId, customerInfo);
+
+        // Call purchase completed callback if provided
+        if (this.config.onPurchaseCompleted) {
+          try {
+            await this.config.onPurchaseCompleted(
+              userId,
+              pkg.product.identifier,
+              customerInfo
+            );
+          } catch (error) {
+            // Don't fail purchase if callback fails
+          }
+        }
+
+        return {
+          success: true,
+          isPremium: true,
+          customerInfo,
+        };
+      } else {
+        throw new RevenueCatPurchaseError(
+          "Purchase completed but premium entitlement not active",
+          pkg.product.identifier
+        );
+      }
+    } catch (error: any) {
+      // Check if user cancelled
+      if (error.userCancelled) {
+        return {
+          success: false,
+          isPremium: false,
+        };
+      }
+
+      const errorMessage = error instanceof Error ? error.message : "Purchase failed";
+      throw new RevenueCatPurchaseError(errorMessage, pkg.product.identifier);
+    }
+  }
+
+  /**
+   * Restore purchases and sync to database
+   */
+  async restorePurchases(userId: string): Promise<RestoreResult> {
+    if (!this.isInitializedFlag) {
+      throw new RevenueCatInitializationError();
+    }
+
+    if (isExpoGo()) {
+      throw new RevenueCatExpoGoError();
+    }
+
+    try {
+      const restoreResult = await Purchases.restorePurchases();
+      const customerInfo = restoreResult.customerInfo;
+      const isPremium = !!customerInfo.entitlements.active["premium"];
+
+      if (isPremium) {
+        // Sync to database
+        await this.syncPremiumStatus(userId, customerInfo);
+
+        // Call restore completed callback if provided
+        if (this.config.onRestoreCompleted) {
+          try {
+            await this.config.onRestoreCompleted(userId, true, customerInfo);
+          } catch (error) {
+            // Don't fail restore if callback fails
+          }
+        }
+
+        return {
+          success: true,
+          isPremium: true,
+          customerInfo,
+        };
+      } else {
+        // Call restore completed callback even if no premium
+        if (this.config.onRestoreCompleted) {
+          try {
+            await this.config.onRestoreCompleted(userId, false, customerInfo);
+          } catch (error) {
+            // Don't fail if callback fails
+          }
+        }
+
+        return {
+          success: false,
+          isPremium: false,
+        };
+      }
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : "Restore failed";
+      throw new RevenueCatRestoreError(errorMessage);
+    }
+  }
+
+  /**
+   * Reset RevenueCat SDK (for logout)
+   */
+  async reset(): Promise<void> {
+    if (!this.isInitializedFlag) {
+      return;
+    }
+
+    try {
+      await Purchases.logOut();
+      this.isInitializedFlag = false;
+    } catch (error) {
+      // Ignore reset errors
+    }
+  }
+}
+
+/**
+ * Singleton instance
+ * Apps should use initializeRevenueCatService() to set up with their config
+ */
+let revenueCatServiceInstance: RevenueCatService | null = null;
+
+/**
+ * Initialize RevenueCat service with configuration
+ */
+export function initializeRevenueCatService(config?: RevenueCatConfig): RevenueCatService {
+  if (!revenueCatServiceInstance) {
+    revenueCatServiceInstance = new RevenueCatService(config);
+  }
+  return revenueCatServiceInstance;
+}
+
+/**
+ * Get RevenueCat service instance
+ * @throws {RevenueCatInitializationError} If service is not initialized
+ */
+export function getRevenueCatService(): RevenueCatService {
+  if (!revenueCatServiceInstance) {
+    throw new RevenueCatInitializationError(
+      "RevenueCat service is not initialized. Call initializeRevenueCatService() first."
+    );
+  }
+  return revenueCatServiceInstance;
+}
+
+/**
+ * Reset RevenueCat service (useful for testing)
+ */
+export function resetRevenueCatService(): void {
+  revenueCatServiceInstance = null;
+}
+
