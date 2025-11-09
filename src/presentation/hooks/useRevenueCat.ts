@@ -39,6 +39,9 @@ export function useRevenueCat(): UseRevenueCatResult {
     setLoading(true);
     try {
       const service = getRevenueCatService();
+      if (!service) {
+        return;
+      }
       const result = await service.initialize(userId, apiKey);
       if (result.success) {
         setOffering(result.offering);
@@ -54,6 +57,9 @@ export function useRevenueCat(): UseRevenueCatResult {
     setLoading(true);
     try {
       const service = getRevenueCatService();
+      if (!service) {
+        return;
+      }
       const fetchedOffering = await service.fetchOfferings();
       setOffering(fetchedOffering);
     } catch (error) {
@@ -65,11 +71,17 @@ export function useRevenueCat(): UseRevenueCatResult {
 
   const purchasePackage = useCallback(async (pkg: PurchasesPackage, userId: string) => {
     const service = getRevenueCatService();
+    if (!service) {
+      throw new Error("RevenueCat service is not initialized");
+    }
     return await service.purchasePackage(pkg, userId);
   }, []);
 
   const restorePurchases = useCallback(async (userId: string) => {
     const service = getRevenueCatService();
+    if (!service) {
+      throw new Error("RevenueCat service is not initialized");
+    }
     return await service.restorePurchases(userId);
   }, []);
 

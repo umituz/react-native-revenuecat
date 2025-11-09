@@ -52,7 +52,7 @@ export class RevenueCatService implements IRevenueCatService {
   /**
    * Get RevenueCat API key for current platform
    */
-  getRevenueCatKey(): string {
+  getRevenueCatKey(): string | null {
     const iosKey =
       this.config.iosApiKey ||
       Constants.expoConfig?.extra?.revenueCatIosKey ||
@@ -70,10 +70,9 @@ export class RevenueCatService implements IRevenueCatService {
       default: iosKey,
     });
 
-    if (!key) {
-      throw new RevenueCatConfigurationError(
-        "RevenueCat API key not found. Please provide iosApiKey or androidApiKey in config."
-      );
+    // Return null instead of throwing - let initialize() handle the error
+    if (!key || key === "" || key.includes("YOUR_")) {
+      return null;
     }
 
     return key;
@@ -94,6 +93,8 @@ export class RevenueCatService implements IRevenueCatService {
     try {
       // Check if running in Expo Go
       if (isExpoGo()) {
+        /* eslint-disable-next-line no-console */
+        if (__DEV__) console.log("Expo Go app detected. Using RevenueCat in Browser Mode.");
         return {
           success: false,
           offering: null,
@@ -103,7 +104,17 @@ export class RevenueCatService implements IRevenueCatService {
 
       const key = apiKey || this.getRevenueCatKey();
       if (!key) {
-        throw new RevenueCatConfigurationError("RevenueCat API key is required");
+        /* eslint-disable-next-line no-console */
+        if (__DEV__) {
+          console.warn(
+            "RevenueCat API key not found. Please provide iosApiKey or androidApiKey in config."
+          );
+        }
+        return {
+          success: false,
+          offering: null,
+          hasPremium: false,
+        };
       }
 
       await Purchases.configure({ apiKey: key, appUserID: userId });
@@ -125,6 +136,11 @@ export class RevenueCatService implements IRevenueCatService {
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "RevenueCat init failed";
 
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.warn("RevenueCat initialization failed:", errorMessage);
+      }
+
       // Check if it's Expo Go error
       if (
         errorMessage.includes("Expo Go") ||
@@ -137,7 +153,12 @@ export class RevenueCatService implements IRevenueCatService {
         };
       }
 
-      throw new RevenueCatInitializationError(errorMessage);
+      // Return failure instead of throwing - graceful degradation
+      return {
+        success: false,
+        offering: null,
+        hasPremium: false,
+      };
     }
   }
 
@@ -146,7 +167,11 @@ export class RevenueCatService implements IRevenueCatService {
    */
   async fetchOfferings(): Promise<PurchasesOffering | null> {
     if (!this.isInitializedFlag) {
-      throw new RevenueCatInitializationError();
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.warn("RevenueCat is not initialized. Call initialize() first.");
+      }
+      return null;
     }
 
     if (isExpoGo()) {
@@ -158,7 +183,11 @@ export class RevenueCatService implements IRevenueCatService {
       return offerings.current;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "Fetch offerings failed";
-      throw new RevenueCatNetworkError(errorMessage);
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.warn("RevenueCat fetchOfferings failed:", errorMessage);
+      }
+      return null; // Return null instead of throwing - graceful degradation
     }
   }
 
@@ -346,13 +375,17 @@ export function initializeRevenueCatService(config?: RevenueCatConfig): RevenueC
 
 /**
  * Get RevenueCat service instance
- * @throws {RevenueCatInitializationError} If service is not initialized
+ * Returns null if service is not initialized (graceful degradation)
  */
-export function getRevenueCatService(): RevenueCatService {
+export function getRevenueCatService(): RevenueCatService | null {
   if (!revenueCatServiceInstance) {
-    throw new RevenueCatInitializationError(
-      "RevenueCat service is not initialized. Call initializeRevenueCatService() first."
-    );
+    /* eslint-disable-next-line no-console */
+    if (__DEV__) {
+      console.warn(
+        "RevenueCat service is not initialized. Call initializeRevenueCatService() first."
+      );
+    }
+    return null;
   }
   return revenueCatServiceInstance;
 }
