@@ -265,36 +265,16 @@ export class RevenueCatService implements IRevenueCatService {
 
   /**
    * Sync premium status to database
-   * 
-   * @param userId - User ID
-   * @param customerInfo - RevenueCat customer info
-   * @param purchasedProductId - Optional: Product ID from purchased package (more accurate than entitlement.productIdentifier)
    */
   private async syncPremiumStatus(
     userId: string,
-    customerInfo: CustomerInfo,
-    purchasedProductId?: string
+    customerInfo: CustomerInfo
   ): Promise<void> {
     const premiumEntitlement = customerInfo.entitlements.active["premium"];
 
     if (premiumEntitlement) {
-      // 🚨 CRITICAL: Use purchasedProductId if provided (from purchasePackage)
-      // This ensures we use the actual purchased product ID, not the entitlement's productIdentifier
-      // which might be from a previous subscription
-      // If purchasedProductId is not provided (e.g., from restorePurchases), fall back to entitlement.productIdentifier
-      const productId = purchasedProductId || premiumEntitlement.productIdentifier;
+      const productId = premiumEntitlement.productIdentifier;
       const expiresAt = getExpirationDate(premiumEntitlement);
-
-      /* eslint-disable-next-line no-console */
-      if (__DEV__) {
-        console.log("🔍 RevenueCat syncPremiumStatus:", {
-          userId,
-          purchasedProductId,
-          entitlementProductId: premiumEntitlement.productIdentifier,
-          usingProductId: productId,
-          expiresAt,
-        });
-      }
 
       // Call callback if provided
       if (this.config.onPremiumStatusChanged) {
@@ -335,29 +315,15 @@ export class RevenueCatService implements IRevenueCatService {
       const isPremium = !!customerInfo.entitlements.active["premium"];
 
       if (isPremium) {
-        // 🚨 CRITICAL: Pass purchased package product ID to syncPremiumStatus
-        // This ensures we use the actual purchased product ID, not the entitlement's productIdentifier
-        // which might be from a previous subscription
-        const purchasedProductId = pkg.product.identifier;
-        
-        /* eslint-disable-next-line no-console */
-        if (__DEV__) {
-          console.log("🔍 RevenueCat purchasePackage:", {
-            userId,
-            purchasedProductId,
-            packageIdentifier: pkg.identifier,
-          });
-        }
-
-        // Sync to database with purchased product ID
-        await this.syncPremiumStatus(userId, customerInfo, purchasedProductId);
+        // Sync to database
+        await this.syncPremiumStatus(userId, customerInfo);
 
         // Call purchase completed callback if provided
         if (this.config.onPurchaseCompleted) {
           try {
             await this.config.onPurchaseCompleted(
               userId,
-              purchasedProductId,
+              pkg.product.identifier,
               customerInfo
             );
           } catch (error) {
