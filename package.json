@@ -1,6 +1,6 @@
 {
   "name": "@umituz/react-native-revenuecat",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "description": "RevenueCat wrapper for React Native apps - Secure subscription management with database-first approach",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -36,7 +36,8 @@
     "expo-constants": ">=15.0.0",
     "react": ">=18.2.0",
     "react-native": ">=0.74.0",
-    "react-native-purchases": ">=9.0.0"
+    "react-native-purchases": ">=9.0.0",
+    "@umituz/react-native-subscription": ">=1.0.3"
   },
   "devDependencies": {
     "@types/react": "^18.2.45",
