@@ -117,6 +117,16 @@ export class RevenueCatService implements IRevenueCatService {
         };
       }
 
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.log("🔑 RevenueCat API Key:", {
+          keyPrefix: key.substring(0, 8) + "...",
+          keyLength: key.length,
+          platform: Platform.OS,
+          isValidFormat: key.startsWith("appl_") || key.startsWith("goog_"),
+        });
+      }
+
       await Purchases.configure({ apiKey: key, appUserID: userId });
       this.isInitializedFlag = true;
 
@@ -127,6 +137,25 @@ export class RevenueCatService implements IRevenueCatService {
 
       const hasPremium = !!customerInfo.entitlements.active["premium"];
       const offering = offerings.current;
+
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.log("🔵 RevenueCat initialized:", {
+          hasPremium,
+          hasOffering: !!offering,
+          offeringIdentifier: offering?.identifier || "null",
+          availableOfferings: Object.keys(offerings.all || {}),
+          currentOfferingId: offerings.current?.identifier || "null",
+        });
+
+        if (!offering) {
+          console.warn("⚠️ RevenueCat offering is null! Check RevenueCat dashboard:");
+          console.warn("  1. Offering identifier must be 'default' (lowercase)");
+          console.warn("  2. Offering must have packages added");
+          console.warn("  3. Products must be matched in RevenueCat");
+          console.warn("  4. App Store Connect products must be 'Ready to Submit'");
+        }
+      }
 
       return {
         success: true,
@@ -180,7 +209,26 @@ export class RevenueCatService implements IRevenueCatService {
 
     try {
       const offerings = await Purchases.getOfferings();
-      return offerings.current;
+      const currentOffering = offerings.current;
+
+      /* eslint-disable-next-line no-console */
+      if (__DEV__) {
+        console.log("🔵 RevenueCat fetchOfferings:", {
+          hasOffering: !!currentOffering,
+          offeringIdentifier: currentOffering?.identifier || "null",
+          availableOfferings: Object.keys(offerings.all || {}),
+          packagesCount: currentOffering?.availablePackages?.length || 0,
+        });
+
+        if (!currentOffering) {
+          console.warn("⚠️ RevenueCat offering is null after fetchOfferings!");
+          console.warn("  1. Check RevenueCat dashboard - offering identifier must be 'default'");
+          console.warn("  2. Ensure offering has packages with products");
+          console.warn("  3. Verify App Store Connect products are 'Ready to Submit'");
+        }
+      }
+
+      return currentOffering;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : "Fetch offerings failed";
       /* eslint-disable-next-line no-console */
