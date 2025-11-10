@@ -13,7 +13,7 @@ import Purchases, {
   type PurchasesOffering,
   type CustomerInfo,
 } from "react-native-purchases";
-import type { IRevenueCatService, InitializeResult, PurchaseResult, RestoreResult } from "../application/ports/IRevenueCatService";
+import type { IRevenueCatService, InitializeResult, PurchaseResult, RestoreResult } from "../../application/ports/IRevenueCatService";
 import {
   RevenueCatInitializationError,
   RevenueCatConfigurationError,
@@ -297,8 +297,7 @@ export class RevenueCatService implements IRevenueCatService {
     }
 
     try {
-      const restoreResult = await Purchases.restorePurchases();
-      const customerInfo = restoreResult.customerInfo;
+      const customerInfo = await Purchases.restorePurchases();
       const isPremium = !!customerInfo.entitlements.active["premium"];
 
       if (isPremium) {

@@ -52,7 +52,7 @@ export interface IRevenueCatService {
   /**
    * Get RevenueCat API key for current platform
    */
-  getRevenueCatKey(): string;
+  getRevenueCatKey(): string | null;
 
   /**
    * Check if RevenueCat is initialized
