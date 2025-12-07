@@ -1,39 +1,22 @@
 /**
  * RevenueCat Service Implementation
  * Secure RevenueCat wrapper with database-first approach
- *
- * IMPORTANT: RevenueCat is ONLY used for purchases.
- * Premium status should always be checked from your database.
  */
 
-import Purchases, {
-  type PurchasesPackage,
-  type PurchasesOffering,
-} from "react-native-purchases";
+import Purchases, { type PurchasesOffering } from "react-native-purchases";
 import type {
   IRevenueCatService,
   InitializeResult,
   PurchaseResult,
   RestoreResult,
 } from "../../application/ports/IRevenueCatService";
-import {
-  RevenueCatInitializationError,
-  RevenueCatPurchaseError,
-  RevenueCatRestoreError,
-  RevenueCatExpoGoError,
-} from "../../domain/errors/RevenueCatError";
 import type { RevenueCatConfig } from "../../domain/value-objects/RevenueCatConfig";
-import {
-  isUserCancelledError,
-  getErrorMessage,
-} from "../../domain/types/RevenueCatTypes";
+import { getErrorMessage } from "../../domain/types/RevenueCatTypes";
 import { isExpoGo, isDevelopment } from "../utils/ExpoGoDetector";
 import { resolveApiKey, shouldUseTestStore } from "../utils/ApiKeyResolver";
-import {
-  syncPremiumStatus,
-  notifyPurchaseCompleted,
-  notifyRestoreCompleted,
-} from "../utils/PremiumStatusSyncer";
+import { handlePurchase } from "./PurchaseHandler";
+import { handleRestore } from "./RestoreHandler";
+import type { PurchasesPackage } from "react-native-purchases";
 
 export class RevenueCatService implements IRevenueCatService {
   private config: RevenueCatConfig;
@@ -43,6 +26,19 @@ export class RevenueCatService implements IRevenueCatService {
   constructor(config: RevenueCatConfig = {}) {
     this.config = config;
     this.usingTestStore = shouldUseTestStore(config);
+    this.logConfigStatus();
+  }
+
+  private logConfigStatus(): void {
+    if (isDevelopment()) {
+      const hasTestKey = !!this.config.testStoreKey;
+      // eslint-disable-next-line no-console
+      console.log("[RevenueCat] Config:", {
+        hasTestKey,
+        usingTestStore: this.usingTestStore,
+        isExpoGo: isExpoGo(),
+      });
+    }
   }
 
   getRevenueCatKey(): string | null {
@@ -64,11 +60,12 @@ export class RevenueCatService implements IRevenueCatService {
 
     const key = apiKey || this.getRevenueCatKey();
     if (!key) {
+      this.logMissingKey();
       return { success: false, offering: null, hasPremium: false };
     }
 
     try {
-      this.logTestStoreUsage();
+      this.logInitStart();
       await Purchases.configure({ apiKey: key, appUserID: userId });
       this.isInitializedFlag = true;
 
@@ -78,9 +75,7 @@ export class RevenueCatService implements IRevenueCatService {
       ]);
 
       const hasPremium = !!customerInfo.entitlements.active["premium"];
-      const offering = offerings.current;
-
-      return { success: true, offering, hasPremium };
+      return { success: true, offering: offerings.current, hasPremium };
     } catch (error) {
       const errorMessage = getErrorMessage(error, "RevenueCat init failed");
       this.logInitError(errorMessage);
@@ -88,28 +83,30 @@ export class RevenueCatService implements IRevenueCatService {
     }
   }
 
-  private logTestStoreUsage(): void {
+  private logMissingKey(): void {
+    if (isDevelopment()) {
+      // eslint-disable-next-line no-console
+      console.warn("[RevenueCat] No API key available");
+    }
+  }
+
+  private logInitStart(): void {
     if (isDevelopment() && this.usingTestStore) {
       // eslint-disable-next-line no-console
-      console.log("[RevenueCat] Using Test Store key for development");
+      console.log("[RevenueCat] Using Test Store key");
     }
   }
 
   private logInitError(message: string): void {
     if (isDevelopment()) {
       // eslint-disable-next-line no-console
-      console.warn("[RevenueCat] Initialization failed:", message);
+      console.warn("[RevenueCat] Init failed:", message);
     }
   }
 
   async fetchOfferings(): Promise<PurchasesOffering | null> {
-    if (!this.isInitializedFlag) {
-      return null;
-    }
-
-    if (isExpoGo() && !this.usingTestStore) {
-      return null;
-    }
+    if (!this.isInitializedFlag) return null;
+    if (isExpoGo() && !this.usingTestStore) return null;
 
     try {
       const offerings = await Purchases.getOfferings();
@@ -123,72 +120,30 @@ export class RevenueCatService implements IRevenueCatService {
     pkg: PurchasesPackage,
     userId: string
   ): Promise<PurchaseResult> {
-    if (!this.isInitializedFlag) {
-      throw new RevenueCatInitializationError();
-    }
-
-    if (isExpoGo() && !this.usingTestStore) {
-      throw new RevenueCatExpoGoError();
-    }
-
-    try {
-      const purchaseResult = await Purchases.purchasePackage(pkg);
-      const customerInfo = purchaseResult.customerInfo;
-      const isPremium = !!customerInfo.entitlements.active["premium"];
-
-      if (isPremium) {
-        await syncPremiumStatus(this.config, userId, customerInfo);
-        await notifyPurchaseCompleted(
-          this.config,
-          userId,
-          pkg.product.identifier,
-          customerInfo
-        );
-        return { success: true, isPremium: true, customerInfo };
-      }
-
-      throw new RevenueCatPurchaseError(
-        "Purchase completed but premium entitlement not active",
-        pkg.product.identifier
-      );
-    } catch (error) {
-      if (isUserCancelledError(error)) {
-        return { success: false, isPremium: false };
-      }
-      const errorMessage = getErrorMessage(error, "Purchase failed");
-      throw new RevenueCatPurchaseError(errorMessage, pkg.product.identifier);
-    }
+    return handlePurchase(
+      {
+        config: this.config,
+        isInitialized: () => this.isInitializedFlag,
+        isUsingTestStore: () => this.usingTestStore,
+      },
+      pkg,
+      userId
+    );
   }
 
   async restorePurchases(userId: string): Promise<RestoreResult> {
-    if (!this.isInitializedFlag) {
-      throw new RevenueCatInitializationError();
-    }
-
-    if (isExpoGo() && !this.usingTestStore) {
-      throw new RevenueCatExpoGoError();
-    }
-
-    try {
-      const customerInfo = await Purchases.restorePurchases();
-      const isPremium = !!customerInfo.entitlements.active["premium"];
-
-      if (isPremium) {
-        await syncPremiumStatus(this.config, userId, customerInfo);
-      }
-      await notifyRestoreCompleted(this.config, userId, isPremium, customerInfo);
-
-      return { success: isPremium, isPremium, customerInfo };
-    } catch (error) {
-      const errorMessage = getErrorMessage(error, "Restore failed");
-      throw new RevenueCatRestoreError(errorMessage);
-    }
+    return handleRestore(
+      {
+        config: this.config,
+        isInitialized: () => this.isInitializedFlag,
+        isUsingTestStore: () => this.usingTestStore,
+      },
+      userId
+    );
   }
 
   async reset(): Promise<void> {
-    if (!this.isInitializedFlag) {
-      return;
-    }
+    if (!this.isInitializedFlag) return;
 
     try {
       await Purchases.logOut();

@@ -1,11 +1,9 @@
 /**
  * API Key Resolver
- * Resolves RevenueCat API key for current platform
- * Supports Test Store key for development/Expo Go environments
+ * Resolves RevenueCat API key from configuration
  */
 
 import { Platform } from "react-native";
-import Constants from "expo-constants";
 import type { RevenueCatConfig } from "../../domain/value-objects/RevenueCatConfig";
 import { isExpoGo, isDevelopment } from "./ExpoGoDetector";
 
@@ -18,7 +16,7 @@ export function shouldUseTestStore(config: RevenueCatConfig): boolean {
 }
 
 /**
- * Get RevenueCat API key for current platform
+ * Get RevenueCat API key from config
  * Returns Test Store key if in dev/Expo Go environment
  */
 export function resolveApiKey(config: RevenueCatConfig): string | null {
@@ -26,22 +24,10 @@ export function resolveApiKey(config: RevenueCatConfig): string | null {
     return config.testStoreKey || null;
   }
 
-  const iosKey =
-    config.iosApiKey ||
-    Constants.expoConfig?.extra?.revenueCatIosKey ||
-    process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ||
-    "";
-
-  const androidKey =
-    config.androidApiKey ||
-    Constants.expoConfig?.extra?.revenueCatAndroidKey ||
-    process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ||
-    "";
-
   const key = Platform.select({
-    ios: iosKey,
-    android: androidKey,
-    default: iosKey,
+    ios: config.iosApiKey,
+    android: config.androidApiKey,
+    default: config.iosApiKey,
   });
 
   if (!key || key === "" || key.includes("YOUR_")) {
