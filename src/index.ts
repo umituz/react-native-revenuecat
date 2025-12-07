@@ -32,6 +32,17 @@ export {
 
 export type { RevenueCatConfig } from './domain/value-objects/RevenueCatConfig';
 
+export type {
+  RevenueCatEntitlement,
+  RevenueCatPurchaseErrorInfo,
+} from './domain/types/RevenueCatTypes';
+
+export {
+  getPremiumEntitlement,
+  isUserCancelledError,
+  getErrorMessage,
+} from './domain/types/RevenueCatTypes';
+
 // =============================================================================
 // APPLICATION LAYER - Ports
 // =============================================================================

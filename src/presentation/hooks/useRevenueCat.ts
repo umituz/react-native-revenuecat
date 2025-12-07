@@ -6,6 +6,7 @@
 import { useState, useCallback } from "react";
 import type { PurchasesOffering, PurchasesPackage } from "react-native-purchases";
 import { getRevenueCatService } from "../../infrastructure/services/RevenueCatService";
+import type { PurchaseResult, RestoreResult } from "../../application/ports/IRevenueCatService";
 
 export interface UseRevenueCatResult {
   /** Current offering */
@@ -17,9 +18,9 @@ export interface UseRevenueCatResult {
   /** Load offerings */
   loadOfferings: () => Promise<void>;
   /** Purchase a package */
-  purchasePackage: (pkg: PurchasesPackage, userId: string) => Promise<any>;
+  purchasePackage: (pkg: PurchasesPackage, userId: string) => Promise<PurchaseResult>;
   /** Restore purchases */
-  restorePurchases: (userId: string) => Promise<any>;
+  restorePurchases: (userId: string) => Promise<RestoreResult>;
 }
 
 /**
