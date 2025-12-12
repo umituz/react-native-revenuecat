@@ -31,12 +31,13 @@ export interface RevenueCatPurchaseErrorInfo extends Error {
 }
 
 /**
- * Extract premium entitlement from CustomerInfo
+ * Extract entitlement from CustomerInfo
  */
 export function getPremiumEntitlement(
-  customerInfo: CustomerInfo
+  customerInfo: CustomerInfo,
+  entitlementIdentifier: string = 'premium'
 ): RevenueCatEntitlement | null {
-  const entitlement = customerInfo.entitlements.active["premium"];
+  const entitlement = customerInfo.entitlements.active[entitlementIdentifier];
   if (!entitlement) {
     return null;
   }

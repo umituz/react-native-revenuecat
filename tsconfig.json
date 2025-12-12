@@ -1,61 +1,37 @@
 {
   "compilerOptions": {
-    /* Language and Environment */
     "target": "ES2020",
-    "lib": ["ES2020", "dom"],
-    "jsx": "react-native",
-
-    /* Modules */
-    "module": "ES2020",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "baseUrl": "./",
-
-    /* Emit */
-    "declaration": false,
-    "declarationMap": false,
-    "sourceMap": false,
-    "noEmit": true,
-    "outDir": "./lib",
-    "rootDir": "./src",
-    "removeComments": false,
-
-    /* Interop Constraints */
+    "lib": ["ES2020", "DOM"],
+    "allowJs": false,
+    "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true,
-
-    /* Type Checking */
-    "strict": false,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "noImplicitThis": true,
-    "noImplicitAny": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "declaration": true,
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
     "noImplicitOverride": true,
-
-    /* Completeness */
-    "skipLibCheck": true,
-
-    /* React Native specific */
-    "allowJs": false,
-    "checkJs": false
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
     "node_modules",
+    "lib",
     "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts",
-    "**/*.spec.tsx"
+    "**/*.test.tsx"
   ]
 }
-

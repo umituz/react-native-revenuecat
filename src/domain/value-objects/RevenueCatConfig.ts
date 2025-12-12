@@ -12,6 +12,8 @@ export interface RevenueCatConfig {
   androidApiKey?: string;
   /** Test Store key for development/Expo Go testing */
   testStoreKey?: string;
+  /** Entitlement identifier to check for premium status (default: 'premium') */
+  entitlementIdentifier?: string;
   /** Callback for premium status sync to database */
   onPremiumStatusChanged?: (
     userId: string,

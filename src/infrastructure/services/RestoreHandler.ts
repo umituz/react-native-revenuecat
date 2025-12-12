@@ -41,7 +41,8 @@ export async function handleRestore(
 
   try {
     const customerInfo = await Purchases.restorePurchases();
-    const isPremium = !!customerInfo.entitlements.active["premium"];
+    const entitlementIdentifier = deps.config.entitlementIdentifier || 'premium';
+    const isPremium = !!customerInfo.entitlements.active[entitlementIdentifier];
 
     if (isPremium) {
       await syncPremiumStatus(deps.config, userId, customerInfo);

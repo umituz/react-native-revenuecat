@@ -3,7 +3,7 @@
  * React hook for RevenueCat subscription management
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { PurchasesOffering, PurchasesPackage } from "react-native-purchases";
 import { getRevenueCatService } from "../../infrastructure/services/RevenueCatService";
 import type { PurchaseResult, RestoreResult } from "../../application/ports/IRevenueCatService";
@@ -84,6 +84,15 @@ export function useRevenueCat(): UseRevenueCatResult {
       throw new Error("RevenueCat service is not initialized");
     }
     return await service.restorePurchases(userId);
+  }, []);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Clear any pending operations or references if needed
+      setOffering(null);
+      setLoading(false);
+    };
   }, []);
 
   return {

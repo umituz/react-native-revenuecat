@@ -38,6 +38,12 @@ export type {
 } from './domain/types/RevenueCatTypes';
 
 export {
+  DEFAULT_ENTITLEMENT_IDENTIFIER,
+  REVENUECAT_LOG_PREFIX,
+  CREDITS_PRODUCT_IDENTIFIERS,
+} from './domain/constants/RevenueCatConstants';
+
+export {
   getPremiumEntitlement,
   isUserCancelledError,
   getErrorMessage,

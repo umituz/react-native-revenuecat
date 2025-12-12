@@ -7,6 +7,7 @@ import type { CustomerInfo } from "react-native-purchases";
 import type { RevenueCatConfig } from "../../domain/value-objects/RevenueCatConfig";
 import { getPremiumEntitlement } from "../../domain/types/RevenueCatTypes";
 import { getExpirationDate } from "./ExpirationDateCalculator";
+import { Logger } from "./Logger";
 
 /**
  * Sync premium status to database via config callbacks
@@ -21,7 +22,8 @@ export async function syncPremiumStatus(
     return;
   }
 
-  const premiumEntitlement = getPremiumEntitlement(customerInfo);
+  const entitlementIdentifier = config.entitlementIdentifier || 'premium';
+  const premiumEntitlement = getPremiumEntitlement(customerInfo, entitlementIdentifier);
 
   try {
     if (premiumEntitlement) {
@@ -37,12 +39,9 @@ export async function syncPremiumStatus(
       await config.onPremiumStatusChanged(userId, false);
     }
   } catch (error) {
-    // Log error but don't fail the purchase/restore operation
-    if (__DEV__) {
-      const message =
-        error instanceof Error ? error.message : "Premium sync failed";
-      console.warn("[RevenueCat] Premium status sync failed:", message);
-    }
+    const message =
+      error instanceof Error ? error.message : "Premium sync failed";
+    Logger.warn('Premium status sync failed', { error: message });
   }
 }
 
@@ -62,11 +61,9 @@ export async function notifyPurchaseCompleted(
   try {
     await config.onPurchaseCompleted(userId, productId, customerInfo);
   } catch (error) {
-    if (__DEV__) {
-      const message =
-        error instanceof Error ? error.message : "Purchase callback failed";
-      console.warn("[RevenueCat] Purchase completion callback failed:", message);
-    }
+    const message =
+      error instanceof Error ? error.message : "Purchase callback failed";
+    Logger.warn('Purchase completion callback failed', { error: message });
   }
 }
 
@@ -86,10 +83,8 @@ export async function notifyRestoreCompleted(
   try {
     await config.onRestoreCompleted(userId, isPremium, customerInfo);
   } catch (error) {
-    if (__DEV__) {
-      const message =
-        error instanceof Error ? error.message : "Restore callback failed";
-      console.warn("[RevenueCat] Restore completion callback failed:", message);
-    }
+    const message =
+      error instanceof Error ? error.message : "Restore callback failed";
+    Logger.warn('Restore completion callback failed', { error: message });
   }
 }

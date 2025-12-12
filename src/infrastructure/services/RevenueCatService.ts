@@ -3,7 +3,9 @@
  * Secure RevenueCat wrapper with database-first approach
  */
 
-import Purchases, { type PurchasesOffering } from "react-native-purchases";
+import Purchases, {
+  type PurchasesOffering,
+} from "react-native-purchases";
 import type {
   IRevenueCatService,
   InitializeResult,
@@ -12,101 +14,77 @@ import type {
 } from "../../application/ports/IRevenueCatService";
 import type { RevenueCatConfig } from "../../domain/value-objects/RevenueCatConfig";
 import { getErrorMessage } from "../../domain/types/RevenueCatTypes";
-import { isExpoGo, isDevelopment } from "../utils/ExpoGoDetector";
-import { resolveApiKey, shouldUseTestStore } from "../utils/ApiKeyResolver";
+import { isExpoGo } from "../utils/ExpoGoDetector";
+import { resolveApiKey } from "../utils/ApiKeyResolver";
+import { Logger } from "../utils/Logger";
 import { handlePurchase } from "./PurchaseHandler";
 import { handleRestore } from "./RestoreHandler";
+import { CustomerInfoListenerManager } from "./CustomerInfoListenerManager";
+import { ServiceStateManager } from "./ServiceStateManager";
 import type { PurchasesPackage } from "react-native-purchases";
 
 export class RevenueCatService implements IRevenueCatService {
-  private config: RevenueCatConfig;
-  private isInitializedFlag: boolean = false;
-  private usingTestStore: boolean = false;
+  private stateManager: ServiceStateManager;
+  private listenerManager: CustomerInfoListenerManager;
 
   constructor(config: RevenueCatConfig = {}) {
-    this.config = config;
-    this.usingTestStore = shouldUseTestStore(config);
-    this.logConfigStatus();
-  }
-
-  private logConfigStatus(): void {
-    if (isDevelopment()) {
-      const hasTestKey = !!this.config.testStoreKey;
-      // eslint-disable-next-line no-console
-      console.log("[RevenueCat] Config:", {
-        hasTestKey,
-        usingTestStore: this.usingTestStore,
-        isExpoGo: isExpoGo(),
-      });
-    }
+    this.stateManager = new ServiceStateManager(config);
+    this.listenerManager = new CustomerInfoListenerManager(config.entitlementIdentifier);
   }
 
   getRevenueCatKey(): string | null {
-    return resolveApiKey(this.config);
+    return resolveApiKey(this.stateManager.getConfig());
   }
 
   isInitialized(): boolean {
-    return this.isInitializedFlag;
+    return this.stateManager.isInitialized();
   }
 
   isUsingTestStore(): boolean {
-    return this.usingTestStore;
+    return this.stateManager.isUsingTestStore();
   }
 
   async initialize(userId: string, apiKey?: string): Promise<InitializeResult> {
-    if (isExpoGo() && !this.usingTestStore) {
+    if (isExpoGo() && !this.isUsingTestStore()) {
       return { success: false, offering: null, hasPremium: false };
     }
 
     const key = apiKey || this.getRevenueCatKey();
     if (!key) {
-      this.logMissingKey();
+      Logger.warn('No API key available');
       return { success: false, offering: null, hasPremium: false };
     }
 
     try {
-      this.logInitStart();
+      if (this.isUsingTestStore()) {
+        Logger.log('Using Test Store key');
+      }
+      
       await Purchases.configure({ apiKey: key, appUserID: userId });
-      this.isInitializedFlag = true;
+      this.stateManager.setInitialized(true);
+
+      // Set up listener for subscription status changes (renewals, expirations)
+      this.listenerManager.setUserId(userId);
+      this.listenerManager.setupListener(this.stateManager.getConfig());
 
       const [customerInfo, offerings] = await Promise.all([
         Purchases.getCustomerInfo(),
         Purchases.getOfferings(),
       ]);
 
-      const hasPremium = !!customerInfo.entitlements.active["premium"];
+      const entitlementIdentifier = this.stateManager.getConfig().entitlementIdentifier || 'premium';
+      const hasPremium = !!customerInfo.entitlements.active[entitlementIdentifier];
       return { success: true, offering: offerings.current, hasPremium };
     } catch (error) {
       const errorMessage = getErrorMessage(error, "RevenueCat init failed");
-      this.logInitError(errorMessage);
+      Logger.warn('Init failed', { error: errorMessage });
       return { success: false, offering: null, hasPremium: false };
     }
   }
 
-  private logMissingKey(): void {
-    if (isDevelopment()) {
-      // eslint-disable-next-line no-console
-      console.warn("[RevenueCat] No API key available");
-    }
-  }
-
-  private logInitStart(): void {
-    if (isDevelopment() && this.usingTestStore) {
-      // eslint-disable-next-line no-console
-      console.log("[RevenueCat] Using Test Store key");
-    }
-  }
-
-  private logInitError(message: string): void {
-    if (isDevelopment()) {
-      // eslint-disable-next-line no-console
-      console.warn("[RevenueCat] Init failed:", message);
-    }
-  }
-
   async fetchOfferings(): Promise<PurchasesOffering | null> {
-    if (!this.isInitializedFlag) return null;
-    if (isExpoGo() && !this.usingTestStore) return null;
+    if (!this.isInitialized()) return null;
+    if (isExpoGo() && !this.isUsingTestStore()) return null;
 
     try {
       const offerings = await Purchases.getOfferings();
@@ -122,9 +100,9 @@ export class RevenueCatService implements IRevenueCatService {
   ): Promise<PurchaseResult> {
     return handlePurchase(
       {
-        config: this.config,
-        isInitialized: () => this.isInitializedFlag,
-        isUsingTestStore: () => this.usingTestStore,
+        config: this.stateManager.getConfig(),
+        isInitialized: () => this.isInitialized(),
+        isUsingTestStore: () => this.isUsingTestStore(),
       },
       pkg,
       userId
@@ -134,20 +112,23 @@ export class RevenueCatService implements IRevenueCatService {
   async restorePurchases(userId: string): Promise<RestoreResult> {
     return handleRestore(
       {
-        config: this.config,
-        isInitialized: () => this.isInitializedFlag,
-        isUsingTestStore: () => this.usingTestStore,
+        config: this.stateManager.getConfig(),
+        isInitialized: () => this.isInitialized(),
+        isUsingTestStore: () => this.isUsingTestStore(),
       },
       userId
     );
   }
 
   async reset(): Promise<void> {
-    if (!this.isInitializedFlag) return;
+    if (!this.isInitialized()) return;
+
+    // Clean up listener
+    this.listenerManager.destroy();
 
     try {
       await Purchases.logOut();
-      this.isInitializedFlag = false;
+      this.stateManager.setInitialized(false);
     } catch {
       // Reset errors are non-critical
     }
