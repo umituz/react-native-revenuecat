@@ -1,6 +1,6 @@
 {
   "name": "@umituz/react-native-revenuecat",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "RevenueCat wrapper for React Native apps - Secure subscription management with database-first approach",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
